@@ -40,6 +40,12 @@ if (-not (Test-Path $tmux)) {
 # The inherited PATH is kept. The tmux server captures this env, so every pane
 # it forks inherits it.
 $env:MSYS = 'noglob'
+# Force a UTF-8 locale. A pwsh-launched tmux inherits no LANG and can come up
+# NON-UTF-8, which makes it mangle the Unicode block-art Claude Code draws
+# (logo/spinner) into junk like "Γûê" -- correct colours, destroyed glyphs.
+# This sets UTF-8 for the server; `tmux -u` below forces UTF-8 client output.
+if ($env:LANG -notmatch 'UTF-?8') { $env:LANG = 'C.UTF-8' }
+$env:LC_CTYPE = $env:LANG
 $tmuxDir = Split-Path $tmux
 $env:PATH = "$PSScriptRoot;$tmuxDir;$PSHOME;$env:PATH"
 
@@ -51,9 +57,10 @@ function Get-Opt([string[]]$a, [string[]]$names) {
 }
 
 # Console-attached call: tmux talks straight to this terminal. Use for output
-# (ls) and interactive commands (attach, new-without-d).
+# (ls) and interactive commands (attach, new-without-d). -u forces UTF-8 client
+# output so block-art glyphs survive to the outer terminal.
 function Tmux([string[]]$tmuxArgs) {
-    & $tmux @tmuxArgs
+    & $tmux -u @tmuxArgs
     return $LASTEXITCODE
 }
 
@@ -63,7 +70,7 @@ function Tmux([string[]]$tmuxArgs) {
 # long-lived pwsh pane and hang forever -- and tmux gets a clean (non-tty)
 # stdin so `new-session -d` doesn't error with "open terminal failed".
 function TmuxDetached([string]$argLine) {
-    $p = Start-Process -FilePath $tmux -ArgumentList $argLine -NoNewWindow -Wait -PassThru `
+    $p = Start-Process -FilePath $tmux -ArgumentList "-u $argLine" -NoNewWindow -Wait -PassThru `
         -RedirectStandardInput 'NUL' -RedirectStandardOutput 'NUL' -RedirectStandardError 'NUL'
     return $p.ExitCode
 }
