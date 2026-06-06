@@ -31,12 +31,15 @@ Info 'Installing tmux + winpty via pacman...'
 $env:MSYSTEM = 'MSYS'
 & $bash -lc 'pacman -S --noconfirm --needed tmux winpty'
 
-# 3. tmux.conf into MSYS2 home
+# 3. tmux.conf into MSYS2 home, with @@WINMUX@@ resolved to this folder
 $home = & $bash -lc 'echo $HOME'
 $dest = & $bash -lc "cygpath -w `"$home/.tmux.conf`""
 $src  = Join-Path $PSScriptRoot 'tmux.conf'
 Info "Installing tmux.conf -> $dest"
-Copy-Item $src $dest -Force
+if (Test-Path $dest) { Copy-Item $dest "$dest.bak" -Force }   # keep a backup
+$winmuxFwd = $PSScriptRoot -replace '\\', '/'                  # tmux wants /-paths
+(Get-Content $src -Raw).Replace('@@WINMUX@@', $winmuxFwd) |
+    Set-Content $dest -NoNewline -Encoding utf8
 
 # 4. Put this folder (the wmux CLI) on the user PATH
 $onPath = ($env:PATH -split ';') -contains $PSScriptRoot

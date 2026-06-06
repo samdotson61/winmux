@@ -30,12 +30,18 @@ if (-not (Test-Path $tmux)) {
 }
 
 # --- environment the cygwin tmux needs --------------------------------------
-# Prepend the MSYS2 tmux dir and this PowerShell's own install dir ($PSHOME) so
-# tmux resolves and its `pwsh` default-command works regardless of whether pwsh
-# was installed to Program Files or as a Store app. The inherited PATH is kept.
+# Prepend, in order:
+#   $PSScriptRoot - this folder, so panes can resolve the co-located wmux.cmd
+#                   and win-pty.cmd launchers (lets an agent in a pane drive
+#                   sessions with `win-pty ...` without any extra PATH setup).
+#   $tmuxDir      - the MSYS2 tmux dir.
+#   $PSHOME       - this PowerShell's install dir, so the `pwsh` default-command
+#                   resolves whether pwsh is in Program Files or a Store app.
+# The inherited PATH is kept. The tmux server captures this env, so every pane
+# it forks inherits it.
 $env:MSYS = 'noglob'
 $tmuxDir = Split-Path $tmux
-$env:PATH = "$tmuxDir;$PSHOME;$env:PATH"
+$env:PATH = "$PSScriptRoot;$tmuxDir;$PSHOME;$env:PATH"
 
 function Get-Opt([string[]]$a, [string[]]$names) {
     for ($i = 0; $i -lt $a.Count; $i++) {

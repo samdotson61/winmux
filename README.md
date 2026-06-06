@@ -96,11 +96,35 @@ Attach to any agent session from your own PowerShell window while it runs:
 C:\msys64\usr\bin\tmux.exe attach -t agent-pty-<name>
 ```
 
+### …or let an agent drive sessions with the `win-pty` CLI from inside a pane
+
+An agent running *inside* a pwsh pane can spawn and steer sibling sessions
+directly:
+
+```powershell
+win-pty spawn build --cmd "bash -l"
+win-pty send build "make<Enter>"
+win-pty wait-for build "Done"
+win-pty list
+```
+
+This works with no per-pane setup because the config runs
+[`pane-init.ps1`](pane-init.ps1) in every pwsh pane. The cygwin/tmux environment
+round-trip mangles a few Windows variables — `PATHEXT` collapses to a single
+bogus token (so PowerShell stops resolving bare command names) and `USERNAME` is
+emptied — which is exactly what makes a bare `win-pty` fail with *"command not
+found"* or *"system cannot find the path"*. `pane-init.ps1` repairs both and
+adds this folder to the pane's `PATH`, so [`win-pty.cmd`](win-pty.cmd) (and
+`wmux`) resolve by name. The launcher itself sets `MSYS=noglob` and puts tmux on
+`PATH` before calling the win-pty venv CLI.
+
 ## Files
 
-- [`setup.ps1`](setup.ps1) — installs MSYS2 (via winget) and `tmux` + `winpty` (via pacman).
-- [`tmux.conf`](tmux.conf) — PowerShell-7-default config; copy to `~/.tmux.conf` in MSYS2 home.
-- [`wmux.ps1`](wmux.ps1) / [`wmux.cmd`](wmux.cmd) — the `wmux` CLI (put this folder on PATH).
+- [`setup.ps1`](setup.ps1) — installs MSYS2 + tmux + winpty, installs `tmux.conf`, puts this folder on PATH.
+- [`tmux.conf`](tmux.conf) — PowerShell-7-default config (runs `pane-init.ps1` per pane); installed to `~/.tmux.conf`.
+- [`pane-init.ps1`](pane-init.ps1) — per-pane bootstrap: repairs PATHEXT/USERNAME, puts the launchers on PATH.
+- [`wmux.ps1`](wmux.ps1) / [`wmux.cmd`](wmux.cmd) — the `wmux` CLI (this folder goes on PATH).
+- [`win-pty.cmd`](win-pty.cmd) — `win-pty` CLI launcher (env setup + the win-pty venv).
 - [`agent-pty-mcp.cmd`](agent-pty-mcp.cmd) — MCP launcher that puts tmux + pwsh on PATH.
 
 ## Notes
