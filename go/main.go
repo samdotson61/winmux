@@ -33,10 +33,27 @@ func tmuxBin() string {
 	return filepath.Join(root, `usr\bin\tmux.exe`)
 }
 
-// wmuxEnv: UTF-8 locale + MSYS=noglob, and prepend the tmux dir and this exe's
-// own dir to PATH (so panes can resolve co-located launchers like win-pty).
-func wmuxEnv() []string {
+// buildEnv assembles the env tmux runs with: always a UTF-8 locale (so the
+// block-art glyphs Claude draws survive) and tmux + this exe's dir on PATH (so
+// panes resolve co-located tools). MSYS=noglob is applied ONLY when noglob=true.
+//
+// Why noglob is conditional: MSYS=noglob disables Cygwin's pseudo-console
+// (pcon), and the interactive tmux CLIENT needs pcon to attach to a native
+// Windows console — without it tmux dies with "open terminal failed: not a
+// terminal" (raw `tmux new` attaches fine from pwsh; MSYS=noglob is what broke
+// it). So attach/new use attachEnv (noglob=false). Only commands that pass tmux
+// FORMAT strings as args — which Cygwin would brace-expand, #{x} -> #x — need
+// wmuxEnv (noglob=true). Any inherited MSYS is stripped first so we fully
+// control it.
+func buildEnv(noglob bool) []string {
 	env := os.Environ()
+	kept := env[:0]
+	for _, e := range env {
+		if !strings.HasPrefix(e, "MSYS=") {
+			kept = append(kept, e)
+		}
+	}
+	env = kept
 	set := func(k, v string) {
 		pre := k + "="
 		for i, e := range env {
@@ -47,7 +64,9 @@ func wmuxEnv() []string {
 		}
 		env = append(env, pre+v)
 	}
-	set("MSYS", "noglob")
+	if noglob {
+		set("MSYS", "noglob")
+	}
 	lang := os.Getenv("LANG")
 	if u := strings.ToUpper(lang); !strings.Contains(u, "UTF-8") && !strings.Contains(u, "UTF8") {
 		lang = "C.UTF-8"
@@ -70,6 +89,13 @@ func wmuxEnv() []string {
 	return env
 }
 
+// wmuxEnv: env WITH MSYS=noglob — format-string-safe, for non-attaching paths.
+func wmuxEnv() []string { return buildEnv(true) }
+
+// attachEnv: env WITHOUT MSYS=noglob, so Cygwin's pcon can give tmux a real pty
+// on a native Windows console.
+func attachEnv() []string { return buildEnv(false) }
+
 func exitCode(err error) int {
 	if err == nil {
 		return 0
@@ -80,10 +106,22 @@ func exitCode(err error) int {
 	return 1
 }
 
-// console: tmux talks to the real terminal (attach / interactive / output).
+// console: tmux talks to the real terminal, WITH MSYS=noglob. For output and
+// pass-through commands that may carry tmux format strings (ls, kill, etc.).
 func console(args ...string) int {
 	c := exec.Command(tmuxBin(), append([]string{"-u"}, args...)...)
 	c.Env = wmuxEnv()
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return exitCode(c.Run())
+}
+
+// interactive: an ATTACHING tmux (new-and-attach, or `attach`). Like console
+// but with attachEnv (no MSYS=noglob) so Cygwin's pcon gives tmux a real pty on
+// the native Windows console — the fix for "open terminal failed: not a
+// terminal".
+func interactive(args ...string) int {
+	c := exec.Command(tmuxBin(), append([]string{"-u"}, args...)...)
+	c.Env = attachEnv()
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return exitCode(c.Run())
 }
@@ -153,15 +191,15 @@ func main() {
 			if run != "" {
 				a = append(a, run)
 			}
-			code = console(a...)
+			code = interactive(a...)
 		}
 	case "ls", "list":
 		code = console("list-sessions")
 	case "attach":
 		if name := opt(rest, "-t", "--target"); name != "" {
-			code = console("attach", "-t", name)
+			code = interactive("attach", "-t", name)
 		} else {
-			code = console("attach")
+			code = interactive("attach")
 		}
 	case "kill":
 		name := opt(rest, "-t", "--target")
