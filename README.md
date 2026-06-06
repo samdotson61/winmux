@@ -38,17 +38,18 @@ A tmux pane now runs **PowerShell 7**. Inside tmux (default prefix `Ctrl-b`):
 environment for you (`MSYS=noglob`, tmux + pwsh on PATH) so you don't have to
 type the full `C:\msys64\usr\bin\tmux.exe` path or remember the cygwin quirks.
 
-Put the winmux folder on your PATH so you can just type `wmux`:
+`setup.ps1` adds this folder to your user PATH automatically, so after running it
+(and opening a **new** terminal) `wmux` just works. To add it by hand instead:
 
 ```powershell
 # one-time, current user
 $dir = "C:\Claude\winmux"   # wherever this repo lives
 [Environment]::SetEnvironmentVariable(
     "PATH", "$dir;" + [Environment]::GetEnvironmentVariable("PATH","User"), "User")
-# reopen your terminal
+# then reopen your terminal
 ```
 
-Then:
+Once it's on PATH:
 
 ```powershell
 wmux new -t test                  # new PowerShell-7 session "test", and attach

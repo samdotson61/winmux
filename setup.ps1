@@ -38,10 +38,29 @@ $src  = Join-Path $PSScriptRoot 'tmux.conf'
 Info "Installing tmux.conf -> $dest"
 Copy-Item $src $dest -Force
 
-# 4. Report
+# 4. Put this folder (the wmux CLI) on the user PATH
+$onPath = ($env:PATH -split ';') -contains $PSScriptRoot
+$userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+if (($userPath -split ';') -notcontains $PSScriptRoot) {
+    Info "Adding $PSScriptRoot to your user PATH (for the 'wmux' command)..."
+    $newPath = if ([string]::IsNullOrEmpty($userPath)) { $PSScriptRoot } else { "$PSScriptRoot;$userPath" }
+    [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
+    # make it usable in THIS session too
+    if (-not $onPath) { $env:PATH = "$PSScriptRoot;$env:PATH" }
+    $pathChanged = $true
+} else {
+    Info "wmux already on PATH ($PSScriptRoot)"
+}
+
+# 5. Report
 $ver = & "$Msys2Root\usr\bin\tmux.exe" -V
 Info "Done. $ver installed."
 Write-Host ""
-Write-Host "Launch tmux from any PowerShell window:" -ForegroundColor Green
-Write-Host "    $Msys2Root\usr\bin\tmux.exe"
+Write-Host "The 'wmux' command is installed. Try:" -ForegroundColor Green
+Write-Host "    wmux new -t test       # new PowerShell-7 session, attached"
+Write-Host "    wmux ls"
 Write-Host "Panes default to PowerShell 7; prefix+B for bash."
+if ($pathChanged) {
+    Write-Host ""
+    Write-Host "NOTE: PATH was updated - open a NEW terminal for 'wmux' to resolve." -ForegroundColor Yellow
+}
