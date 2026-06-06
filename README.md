@@ -12,16 +12,16 @@ cygwin runtime. This repo gets that running and wires PowerShell into it.
 ## Quick start
 
 ```powershell
-# 1. Install MSYS2 + native tmux (one-time)
-./setup.ps1
+# one-time: installs MSYS2 + native tmux, installs the tmux config to your
+# MSYS2 home (filling in this folder's path), and puts `wmux` on your PATH.
+./install.ps1
 
-# 2. Drop the tmux config into your MSYS2 home
-Copy-Item tmux.conf "$env:USERPROFILE\..\..\msys64\home\$env:USERNAME\.tmux.conf"
-#   (or simply copy tmux.conf to C:\msys64\home\<you>\.tmux.conf)
-
-# 3. Launch tmux from any PowerShell window
-C:\msys64\usr\bin\tmux.exe
+# then open a NEW terminal:
+wmux new -t test     # native tmux session with a PowerShell-7 pane, attached
 ```
+
+(`install.ps1` is idempotent — safe to re-run.) To drive tmux from an agent,
+pair this with [win-pty](https://github.com/samdotson61/win-pty).
 
 A tmux pane now runs **PowerShell 7**. Inside tmux (default prefix `Ctrl-b`):
 
@@ -38,7 +38,7 @@ A tmux pane now runs **PowerShell 7**. Inside tmux (default prefix `Ctrl-b`):
 environment for you (`MSYS=noglob`, tmux + pwsh on PATH) so you don't have to
 type the full `C:\msys64\usr\bin\tmux.exe` path or remember the cygwin quirks.
 
-`setup.ps1` adds this folder to your user PATH automatically, so after running it
+`install.ps1` adds this folder to your user PATH automatically, so after running it
 (and opening a **new** terminal) `wmux` just works. To add it by hand instead:
 
 ```powershell
@@ -75,20 +75,18 @@ wmux split-window -h              # anything unrecognized is passed to tmux
 
 [win-pty](https://github.com/samdotson61/win-pty) (the Windows fork of agent-pty)
 is an MCP server that gives an LLM agent a persistent terminal it can drive
-(spawn/send/snapshot/wait/list/kill) while you watch or take over. Once it's
-installed, register the server with the included launcher. In `~/.claude.json`:
+(spawn/send/snapshot/wait/list/kill) while you watch or take over. Install it
+(`win-pty/install.ps1`) and register its self-locating launcher in
+`~/.claude.json` — win-pty's installer prints the exact snippet with the right
+path:
 
 ```json
-"agent-pty": {
+"win-pty": {
   "type": "stdio",
   "command": "cmd.exe",
-  "args": ["/c", "C:\\Claude\\winmux\\agent-pty-mcp.cmd"]
+  "args": ["/c", "C:\\path\\to\\win-pty\\win-pty-mcp.cmd"]
 }
 ```
-
-Edit [`agent-pty-mcp.cmd`](agent-pty-mcp.cmd) so its Python path points at your
-win-pty checkout. The wrapper prepends the MSYS2 `tmux` dir and PowerShell 7
-to `PATH` (keeping the full Windows `PATH`) and sets `MSYS=noglob`.
 
 Attach to any agent session from your own PowerShell window while it runs:
 
@@ -111,25 +109,29 @@ win-pty list
 This works with no per-pane setup because the config runs
 [`pane-init.ps1`](pane-init.ps1) in every pwsh pane. The cygwin/tmux environment
 round-trip mangles a few Windows variables — `PATHEXT` collapses to a single
-bogus token (so PowerShell stops resolving bare command names) and `USERNAME` is
-emptied — which is exactly what makes a bare `win-pty` fail with *"command not
-found"* or *"system cannot find the path"*. `pane-init.ps1` repairs both and
-adds this folder to the pane's `PATH`, so [`win-pty.cmd`](win-pty.cmd) (and
-`wmux`) resolve by name. The launcher itself sets `MSYS=noglob` and puts tmux on
-`PATH` before calling the win-pty venv CLI.
+bogus token (so PowerShell stops resolving bare command names), `USERNAME` is
+emptied, and PATH entries get dropped — which is what makes a bare `win-pty`
+fail with *"command not found"* or *"system cannot find the path"*.
+`pane-init.ps1` repairs all three: it restores PATHEXT/USERNAME and re-asserts
+the persistent (Machine + User) PATH, where `install.ps1` (winmux) and
+`win-pty/install.ps1` put their folders — so both `win-pty` and `wmux` resolve
+by name. (win-pty's own launcher is self-locating and lives in the win-pty repo.)
 
 ## Files
 
-- [`setup.ps1`](setup.ps1) — installs MSYS2 + tmux + winpty, installs `tmux.conf`, puts this folder on PATH.
+- [`install.ps1`](install.ps1) — installs MSYS2 + tmux + winpty, installs `tmux.conf` (resolving its path), puts this folder on PATH.
 - [`tmux.conf`](tmux.conf) — PowerShell-7-default config (runs `pane-init.ps1` per pane); installed to `~/.tmux.conf`.
-- [`pane-init.ps1`](pane-init.ps1) — per-pane bootstrap: repairs PATHEXT/USERNAME, puts the launchers on PATH.
+- [`pane-init.ps1`](pane-init.ps1) — per-pane bootstrap: repairs PATHEXT/USERNAME, re-asserts PATH.
 - [`wmux.ps1`](wmux.ps1) / [`wmux.cmd`](wmux.cmd) — the `wmux` CLI (this folder goes on PATH).
-- [`win-pty.cmd`](win-pty.cmd) — `win-pty` CLI launcher (env setup + the win-pty venv).
-- [`agent-pty-mcp.cmd`](agent-pty-mcp.cmd) — MCP launcher that puts tmux + pwsh on PATH.
+
+The `win-pty` CLI and its MCP launcher live in the companion
+[win-pty](https://github.com/samdotson61/win-pty) repo (self-locating, installed
+by its own `install.ps1`).
 
 ## Notes
 
-- `tmux.conf`'s `default-command` is `pwsh -NoLogo`; remove that line for a bash-default tmux.
+- `tmux.conf`'s `default-command` launches pwsh 7 and runs `pane-init.ps1`; for a
+  bash-default tmux, point it at `bash -l` instead.
 - The MSYS2 `tmux.exe` is a cygwin-runtime program; native Windows console apps
   (like pwsh) run fine in panes, and `winpty` is installed for the rare full-screen
   app that needs it.
