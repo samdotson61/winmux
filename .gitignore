@@ -1,0 +1,4 @@
+
+# Go build artifacts
+/wmux.exe
+go/wmux.exe

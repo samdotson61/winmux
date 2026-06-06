@@ -31,15 +31,50 @@ Info 'Installing tmux + winpty via pacman...'
 $env:MSYSTEM = 'MSYS'
 & $bash -lc 'pacman -S --noconfirm --needed tmux winpty'
 
-# 3. tmux.conf into MSYS2 home, with @@WINMUX@@ resolved to this folder
-$home = & $bash -lc 'echo $HOME'
-$dest = & $bash -lc "cygpath -w `"$home/.tmux.conf`""
-$src  = Join-Path $PSScriptRoot 'tmux.conf'
-Info "Installing tmux.conf -> $dest"
-if (Test-Path $dest) { Copy-Item $dest "$dest.bak" -Force }   # keep a backup
+# 2b. Ensure Go, then build the single static wmux.exe (tool + deps, no pwsh).
+function Resolve-Go {
+    $c = Get-Command go -ErrorAction SilentlyContinue
+    if ($c) { return $c.Source }
+    $p = Join-Path $env:ProgramFiles 'Go\bin\go.exe'
+    if (Test-Path $p) { return $p }
+    return $null
+}
+$go = Resolve-Go
+if (-not $go) {
+    Info 'Go not found - installing via winget (GoLang.Go)...'
+    winget install --id GoLang.Go --accept-source-agreements --accept-package-agreements --disable-interactivity
+    $go = Resolve-Go
+    if (-not $go) { throw 'Go install did not produce go.exe. Install Go from https://go.dev/dl and re-run.' }
+}
+Info "Building wmux.exe with $(& $go version)"
+$wmuxExe = Join-Path $PSScriptRoot 'wmux.exe'
+Push-Location (Join-Path $PSScriptRoot 'go')
+try {
+    & $go build -o $wmuxExe .
+    if ($LASTEXITCODE -ne 0) { throw 'go build (wmux) failed.' }
+} finally { Pop-Location }
+if (-not (Test-Path $wmuxExe)) { throw 'wmux.exe was not produced.' }
+Info "Built: $wmuxExe ($([math]::Round((Get-Item $wmuxExe).Length/1MB,1)) MB, no runtime deps)"
+
+# 3. tmux.conf with @@WINMUX@@ resolved to this folder. A cygwin tmux's HOME
+#    differs by launch context (pwsh -> Windows profile; bash login -> /home),
+#    so write to every plausible location so tmux always finds it.
+$src       = Join-Path $PSScriptRoot 'tmux.conf'
 $winmuxFwd = $PSScriptRoot -replace '\\', '/'                  # tmux wants /-paths
-(Get-Content $src -Raw).Replace('@@WINMUX@@', $winmuxFwd) |
-    Set-Content $dest -NoNewline -Encoding utf8
+$content   = (Get-Content $src -Raw).Replace('@@WINMUX@@', $winmuxFwd)
+$msysHome  = & $bash -lc 'echo $HOME'
+$dests = @(
+    (& $bash -lc "cygpath -w `"$msysHome/.tmux.conf`""),
+    (Join-Path $Msys2Root "home\$env:USERNAME\.tmux.conf"),
+    (Join-Path $env:USERPROFILE '.tmux.conf')
+) | Where-Object { $_ } | Select-Object -Unique
+foreach ($dest in $dests) {
+    $dir = Split-Path $dest
+    if (-not (Test-Path $dir)) { continue }
+    if (Test-Path $dest) { Copy-Item $dest "$dest.bak" -Force }
+    Info "Installing tmux.conf -> $dest"
+    $content | Set-Content $dest -NoNewline -Encoding utf8
+}
 
 # 4. Put this folder (the wmux CLI) on the user PATH
 $onPath = ($env:PATH -split ';') -contains $PSScriptRoot

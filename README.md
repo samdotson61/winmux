@@ -12,8 +12,9 @@ cygwin runtime. This repo gets that running and wires PowerShell into it.
 ## Quick start
 
 ```powershell
-# one-time: installs MSYS2 + native tmux, installs the tmux config to your
-# MSYS2 home (filling in this folder's path), and puts `wmux` on your PATH.
+# one-time: installs MSYS2 + native tmux, ensures Go and compiles the single
+# static wmux.exe, installs the tmux config, and puts `wmux` on your PATH.
+# (Double-click install.cmd, or:)
 ./install.ps1
 
 # then open a NEW terminal:
@@ -34,8 +35,9 @@ A tmux pane now runs **PowerShell 7**. Inside tmux (default prefix `Ctrl-b`):
 
 ## The `wmux` CLI
 
-`wmux` is a thin, friendly wrapper around the MSYS2 tmux that sets up the
-environment for you (`MSYS=noglob`, tmux + pwsh on PATH) so you don't have to
+`wmux` is a single, fast Go binary (`wmux.exe`, built by `install.ps1` — no
+PowerShell cold start) that wraps the MSYS2 tmux with the environment it needs
+(`MSYS=noglob`, a UTF-8 locale, `tmux -u`, tmux on PATH) so you don't have to
 type the full `C:\msys64\usr\bin\tmux.exe` path or remember the cygwin quirks.
 
 `install.ps1` adds this folder to your user PATH automatically, so after running it
@@ -83,8 +85,8 @@ path:
 ```json
 "win-pty": {
   "type": "stdio",
-  "command": "cmd.exe",
-  "args": ["/c", "C:\\path\\to\\win-pty\\win-pty-mcp.cmd"]
+  "command": "C:\\path\\to\\win-pty\\win-pty.exe",
+  "args": ["mcp"]
 }
 ```
 
@@ -115,18 +117,18 @@ fail with *"command not found"* or *"system cannot find the path"*.
 `pane-init.ps1` repairs all three: it restores PATHEXT/USERNAME and re-asserts
 the persistent (Machine + User) PATH, where `install.ps1` (winmux) and
 `win-pty/install.ps1` put their folders — so both `win-pty` and `wmux` resolve
-by name. (win-pty's own launcher is self-locating and lives in the win-pty repo.)
+by name. (win-pty is a single Go exe installed on PATH by its own install.ps1.)
 
 ## Files
 
-- [`install.ps1`](install.ps1) — installs MSYS2 + tmux + winpty, installs `tmux.conf` (resolving its path), puts this folder on PATH.
+- [`install.ps1`](install.ps1) / [`install.cmd`](install.cmd) — one-click install: MSYS2 + tmux + winpty, ensure Go and build `wmux.exe`, install `tmux.conf`, add this folder to PATH.
+- [`go/`](go/) — the `wmux` CLI source (Go); `install.ps1` compiles it to the single static `wmux.exe`.
 - [`tmux.conf`](tmux.conf) — PowerShell-7-default config (runs `pane-init.ps1` per pane); installed to `~/.tmux.conf`.
 - [`pane-init.ps1`](pane-init.ps1) — per-pane bootstrap: repairs PATHEXT/USERNAME, re-asserts PATH.
-- [`wmux.ps1`](wmux.ps1) / [`wmux.cmd`](wmux.cmd) — the `wmux` CLI (this folder goes on PATH).
 
-The `win-pty` CLI and its MCP launcher live in the companion
-[win-pty](https://github.com/samdotson61/win-pty) repo (self-locating, installed
-by its own `install.ps1`).
+The `win-pty` CLI/MCP lives in the companion
+[win-pty](https://github.com/samdotson61/win-pty) repo (also a single Go exe,
+installed by its own `install.ps1`).
 
 ## Notes
 
