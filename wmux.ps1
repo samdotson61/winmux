@@ -1,7 +1,7 @@
 #requires -version 5
 <#
 .SYNOPSIS
-  wmux — a thin, friendly CLI over the native MSYS2 tmux on Windows.
+  wmux - a thin, friendly CLI over the native MSYS2 tmux on Windows.
 .DESCRIPTION
   Wraps C:\msys64\usr\bin\tmux.exe with the environment the cygwin runtime needs
   (MSYS=noglob, tmux + PowerShell 7 on PATH) and a few convenient subcommands.
@@ -30,10 +30,12 @@ if (-not (Test-Path $tmux)) {
 }
 
 # --- environment the cygwin tmux needs --------------------------------------
+# Prepend the MSYS2 tmux dir and this PowerShell's own install dir ($PSHOME) so
+# tmux resolves and its `pwsh` default-command works regardless of whether pwsh
+# was installed to Program Files or as a Store app. The inherited PATH is kept.
 $env:MSYS = 'noglob'
 $tmuxDir = Split-Path $tmux
-$pwshDir = 'C:\Program Files\PowerShell\7'
-$env:PATH = "$tmuxDir;$pwshDir;$env:PATH"
+$env:PATH = "$tmuxDir;$PSHOME;$env:PATH"
 
 function Get-Opt([string[]]$a, [string[]]$names) {
     for ($i = 0; $i -lt $a.Count; $i++) {
@@ -42,9 +44,22 @@ function Get-Opt([string[]]$a, [string[]]$names) {
     return $null
 }
 
-function Invoke-Tmux([string[]]$tmuxArgs) {
+# Console-attached call: tmux talks straight to this terminal. Use for output
+# (ls) and interactive commands (attach, new-without-d).
+function Tmux([string[]]$tmuxArgs) {
     & $tmux @tmuxArgs
     return $LASTEXITCODE
+}
+
+# Detached call with every std stream pointed at the NUL device (the analog of
+# a POSIX /dev/null on all three fds). No inheritable pipe, so the forked pane
+# can't stall us -- a PowerShell-piped child stdout would be held open by a
+# long-lived pwsh pane and hang forever -- and tmux gets a clean (non-tty)
+# stdin so `new-session -d` doesn't error with "open terminal failed".
+function TmuxDetached([string]$argLine) {
+    $p = Start-Process -FilePath $tmux -ArgumentList $argLine -NoNewWindow -Wait -PassThru `
+        -RedirectStandardInput 'NUL' -RedirectStandardOutput 'NUL' -RedirectStandardError 'NUL'
+    return $p.ExitCode
 }
 
 $code = 0
@@ -53,21 +68,29 @@ switch -Regex ($Command) {
         $name = Get-Opt $Rest @('-t', '-s', '--target', '--name')
         if (-not $name) { Write-Error 'usage: wmux new -t <name> [-c <cmd>] [-d]'; exit 2 }
         $cmd = Get-Opt $Rest @('-c', '--cmd')
-        $a = @('new-session')
-        if ($Rest -contains '-d') { $a += '-d' }     # detached; otherwise attaches
-        $a += @('-s', $name)
-        if ($cmd) { $a += $cmd }
-        $code = Invoke-Tmux $a
+        if ($Rest -contains '-d') {
+            # detached -> NUL on all streams, no inheritable pipe
+            $line = "new-session -d -s `"$name`""
+            if ($cmd) { $line += " `"$cmd`"" }
+            $code = TmuxDetached $line
+            if ($code -eq 0) { Write-Host "created session '$name' (detached). attach: wmux attach -t $name" }
+        }
+        else {
+            # foreground -> create and attach to this terminal
+            $a = @('new-session', '-s', $name)
+            if ($cmd) { $a += $cmd }
+            $code = Tmux $a
+        }
     }
-    '^(ls|list)$' { $code = Invoke-Tmux @('list-sessions') }
+    '^(ls|list)$' { $code = Tmux @('list-sessions') }
     '^attach$' {
         $name = Get-Opt $Rest @('-t', '--target')
-        $code = if ($name) { Invoke-Tmux @('attach', '-t', $name) } else { Invoke-Tmux @('attach') }
+        $code = if ($name) { Tmux @('attach', '-t', $name) } else { Tmux @('attach') }
     }
     '^kill$' {
         $name = Get-Opt $Rest @('-t', '--target')
         if (-not $name) { Write-Error 'usage: wmux kill -t <name>'; exit 2 }
-        $code = Invoke-Tmux @('kill-session', '-t', $name)
+        $code = Tmux @('kill-session', '-t', $name)
     }
     '^(|-h|--help|help)$' {
         @'
@@ -91,8 +114,7 @@ Env: WMUX_TMUX (tmux.exe path), MSYS2_ROOT (default C:\msys64).
     }
     default {
         # Unknown command -> pass through verbatim to tmux.
-        $all = @($Command) + $Rest
-        $code = Invoke-Tmux $all
+        $code = Tmux (@($Command) + $Rest)
     }
 }
 

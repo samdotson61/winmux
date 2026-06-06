@@ -32,6 +32,44 @@ A tmux pane now runs **PowerShell 7**. Inside tmux (default prefix `Ctrl-b`):
 | `prefix` `\|` / `prefix` `-` | split into bash (vertical / horizontal) |
 | `prefix` `R` | reload `~/.tmux.conf` |
 
+## The `wmux` CLI
+
+`wmux` is a thin, friendly wrapper around the MSYS2 tmux that sets up the
+environment for you (`MSYS=noglob`, tmux + pwsh on PATH) so you don't have to
+type the full `C:\msys64\usr\bin\tmux.exe` path or remember the cygwin quirks.
+
+Put the winmux folder on your PATH so you can just type `wmux`:
+
+```powershell
+# one-time, current user
+$dir = "C:\Claude\winmux"   # wherever this repo lives
+[Environment]::SetEnvironmentVariable(
+    "PATH", "$dir;" + [Environment]::GetEnvironmentVariable("PATH","User"), "User")
+# reopen your terminal
+```
+
+Then:
+
+```powershell
+wmux new -t test                  # new PowerShell-7 session "test", and attach
+wmux new -t build -c "bash -l" -d # create a detached bash session
+wmux ls                           # list sessions
+wmux attach -t test               # attach (detach again with Ctrl-b d)
+wmux kill -t test                 # kill a session
+wmux split-window -h              # anything unrecognized is passed to tmux
+```
+
+| Command | Does |
+|---|---|
+| `wmux new -t <name> [-c <cmd>] [-d]` | create a session (attaches unless `-d`); default pane is pwsh 7 |
+| `wmux ls` | list sessions |
+| `wmux attach -t <name>` | attach to a session |
+| `wmux kill -t <name>` | kill a session |
+| `wmux <tmux args…>` | passed straight through to tmux |
+
+`wmux` honours `WMUX_TMUX` (path to `tmux.exe`) and `MSYS2_ROOT` (default
+`C:\msys64`) if your install lives elsewhere.
+
 ## Let an agent control it
 
 [win-pty](https://github.com/samdotson61/win-pty) (the Windows fork of agent-pty)
@@ -61,6 +99,7 @@ C:\msys64\usr\bin\tmux.exe attach -t agent-pty-<name>
 
 - [`setup.ps1`](setup.ps1) — installs MSYS2 (via winget) and `tmux` + `winpty` (via pacman).
 - [`tmux.conf`](tmux.conf) — PowerShell-7-default config; copy to `~/.tmux.conf` in MSYS2 home.
+- [`wmux.ps1`](wmux.ps1) / [`wmux.cmd`](wmux.cmd) — the `wmux` CLI (put this folder on PATH).
 - [`agent-pty-mcp.cmd`](agent-pty-mcp.cmd) — MCP launcher that puts tmux + pwsh on PATH.
 
 ## Notes
