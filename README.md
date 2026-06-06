@@ -37,8 +37,15 @@ A tmux pane now runs **PowerShell 7**. Inside tmux (default prefix `Ctrl-b`):
 
 `wmux` is a single, fast Go binary (`wmux.exe`, built by `install.ps1` — no
 PowerShell cold start) that wraps the MSYS2 tmux with the environment it needs
-(`MSYS=noglob`, a UTF-8 locale, `tmux -u`, tmux on PATH) so you don't have to
-type the full `C:\msys64\usr\bin\tmux.exe` path or remember the cygwin quirks.
+(a UTF-8 locale + `tmux -u` for correct glyphs, tmux on PATH) so you don't have
+to type the full `C:\msys64\usr\bin\tmux.exe` path or remember the cygwin quirks.
+
+Interactive `wmux new` / `wmux attach` attach **natively** in PowerShell /
+Windows Terminal via Cygwin's pseudo-console — no `winpty`, no separate `mintty`
+window, just tmux in your current terminal like it works on Linux. (The
+`MSYS=noglob` flag — which disables that pseudo-console and would cause
+`open terminal failed: not a terminal` — is applied only to the non-interactive
+commands that pass tmux format strings, never to attach.)
 
 `install.ps1` adds this folder to your user PATH automatically, so after running it
 (and opening a **new** terminal) `wmux` just works. To add it by hand instead:
