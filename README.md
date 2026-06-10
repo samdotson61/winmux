@@ -1,5 +1,13 @@
 # winmux
 
+> [!IMPORTANT]
+> **⚠️ DEPRECATED — superseded by [gpty](https://github.com/samdotson61/gpty).**
+> winmux and [win-pty](https://github.com/samdotson61/win-pty) were merged into
+> the single cross-platform [gpty](https://github.com/samdotson61/gpty) module:
+> **`gmux` replaces `wmux`** (same commands, same tmux passthrough) and `gpty`
+> replaces `win-pty`. This repo is kept for history and receives no further
+> updates.
+
 Run a **real, native `tmux` on Windows** — no WSL — with **PowerShell 7 panes by
 default** and MSYS2 `bash` one keystroke away. Includes the config and launcher
 to let [win-pty](https://github.com/samdotson61/win-pty) (the Windows agent-pty
